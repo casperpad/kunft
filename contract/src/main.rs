@@ -13,12 +13,14 @@ mod utils;
 extern crate alloc;
 
 use alloc::{
+    borrow::ToOwned,
     boxed::Box,
     format,
     string::{String, ToString},
     vec,
     vec::Vec,
 };
+use constants::{CONTRACT_NAME, CONTRACT_VERSION};
 use core::convert::TryInto;
 
 use casper_types::{
@@ -37,21 +39,20 @@ use casper_contract::{
 
 use crate::{
     constants::{
-        ACCESS_KEY_NAME, ALLOW_MINTING, ARG_ALLOW_MINTING, ARG_APPROVE_ALL, ARG_BURN_MODE,
-        ARG_COLLECTION_NAME, ARG_COLLECTION_SYMBOL, ARG_CONTRACT_WHITELIST, ARG_HOLDER_MODE,
-        ARG_IDENTIFIER_MODE, ARG_JSON_SCHEMA, ARG_METADATA_MUTABILITY, ARG_MINTING_MODE,
-        ARG_NFT_KIND, ARG_NFT_METADATA_KIND, ARG_OPERATOR, ARG_OWNERSHIP_MODE, ARG_RECEIPT_NAME,
-        ARG_SOURCE_KEY, ARG_TARGET_KEY, ARG_TOKEN_META_DATA, ARG_TOKEN_OWNER,
-        ARG_TOTAL_TOKEN_SUPPLY, ARG_WHITELIST_MODE, BURNT_TOKENS, BURN_MODE, COLLECTION_NAME,
-        COLLECTION_SYMBOL, CONTRACT_NAME, CONTRACT_VERSION, CONTRACT_WHITELIST,
-        ENTRY_POINT_APPROVE, ENTRY_POINT_BALANCE_OF, ENTRY_POINT_BURN, ENTRY_POINT_GET_APPROVED,
-        ENTRY_POINT_INIT, ENTRY_POINT_METADATA, ENTRY_POINT_MINT, ENTRY_POINT_OWNER_OF,
-        ENTRY_POINT_SET_APPROVE_FOR_ALL, ENTRY_POINT_SET_TOKEN_METADATA, ENTRY_POINT_SET_VARIABLES,
-        ENTRY_POINT_TRANSFER, HASH_KEY_NAME, HOLDER_MODE, IDENTIFIER_MODE, INSTALLER, JSON_SCHEMA,
-        METADATA_CEP78, METADATA_CUSTOM_VALIDATED, METADATA_MUTABILITY, METADATA_NFT721,
-        METADATA_RAW, MINTING_MODE, NFT_KIND, NFT_METADATA_KIND, NUMBER_OF_MINTED_TOKENS, OPERATOR,
-        OWNED_TOKENS, OWNERSHIP_MODE, RECEIPT_NAME, TOKEN_COUNTS, TOKEN_ISSUERS, TOKEN_OWNERS,
-        TOTAL_TOKEN_SUPPLY, WHITELIST_MODE,
+        ALLOW_MINTING, ARG_ALLOW_MINTING, ARG_APPROVE_ALL, ARG_BURN_MODE, ARG_COLLECTION_NAME,
+        ARG_COLLECTION_SYMBOL, ARG_CONTRACT_WHITELIST, ARG_HOLDER_MODE, ARG_IDENTIFIER_MODE,
+        ARG_JSON_SCHEMA, ARG_METADATA_MUTABILITY, ARG_MINTING_MODE, ARG_NFT_KIND,
+        ARG_NFT_METADATA_KIND, ARG_OPERATOR, ARG_OWNERSHIP_MODE, ARG_RECEIPT_NAME, ARG_SOURCE_KEY,
+        ARG_TARGET_KEY, ARG_TOKEN_META_DATA, ARG_TOKEN_OWNER, ARG_TOTAL_TOKEN_SUPPLY,
+        ARG_WHITELIST_MODE, BURNT_TOKENS, BURN_MODE, COLLECTION_NAME, COLLECTION_SYMBOL,
+        CONTRACT_WHITELIST, ENTRY_POINT_APPROVE, ENTRY_POINT_BALANCE_OF, ENTRY_POINT_BURN,
+        ENTRY_POINT_GET_APPROVED, ENTRY_POINT_INIT, ENTRY_POINT_METADATA, ENTRY_POINT_MINT,
+        ENTRY_POINT_OWNER_OF, ENTRY_POINT_SET_APPROVE_FOR_ALL, ENTRY_POINT_SET_TOKEN_METADATA,
+        ENTRY_POINT_SET_VARIABLES, ENTRY_POINT_TRANSFER, HOLDER_MODE, IDENTIFIER_MODE, INSTALLER,
+        JSON_SCHEMA, METADATA_CEP78, METADATA_CUSTOM_VALIDATED, METADATA_MUTABILITY,
+        METADATA_NFT721, METADATA_RAW, MINTING_MODE, NFT_KIND, NFT_METADATA_KIND,
+        NUMBER_OF_MINTED_TOKENS, OPERATOR, OWNED_TOKENS, OWNERSHIP_MODE, RECEIPT_NAME,
+        TOKEN_COUNTS, TOKEN_ISSUERS, TOKEN_OWNERS, TOTAL_TOKEN_SUPPLY, WHITELIST_MODE,
     },
     error::NFTCoreError,
     metadata::CustomMetadataSchema,
@@ -1271,7 +1272,7 @@ pub extern "C" fn set_token_metadata() {
     );
 }
 
-fn install_nft_contract() -> (ContractHash, ContractVersion) {
+fn install_nft_contract(collection_name: String) -> (ContractHash, ContractVersion) {
     let entry_points = {
         let mut entry_points = EntryPoints::new();
 
@@ -1482,8 +1483,8 @@ fn install_nft_contract() -> (ContractHash, ContractVersion) {
     storage::new_contract(
         entry_points,
         Some(named_keys),
-        Some(HASH_KEY_NAME.to_string()),
-        Some(ACCESS_KEY_NAME.to_string()),
+        Some(format!("{}_contract_package_hash", collection_name)),
+        Some(format!("{}_contract_access_token", collection_name)),
     )
 }
 
@@ -1640,17 +1641,18 @@ pub extern "C" fn call() {
     )
     .unwrap_or(0u8);
 
-    let (contract_hash, contract_version) = install_nft_contract();
+    let (contract_hash, contract_version) = install_nft_contract(collection_name.to_owned());
 
     // Store contract_hash and contract_version under the keys CONTRACT_NAME and CONTRACT_VERSION
     runtime::put_key(CONTRACT_NAME, contract_hash.into());
     runtime::put_key(CONTRACT_VERSION, storage::new_uref(contract_version).into());
 
-    let package_hash: ContractPackageHash = runtime::get_key(HASH_KEY_NAME)
-        .unwrap_or_revert()
-        .into_hash()
-        .map(ContractPackageHash::new)
-        .unwrap();
+    let package_hash: ContractPackageHash =
+        runtime::get_key(&format!("{}_contract_package_hash", collection_name))
+            .unwrap_or_revert()
+            .into_hash()
+            .map(ContractPackageHash::new)
+            .unwrap();
 
     // A sentinel string value which represents the entry for the addition
     // of a read only reference to the NFTs owned by the calling `Account` or `Contract`
